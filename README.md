@@ -64,10 +64,10 @@
   ![Task_1A](https://github.com/user-attachments/assets/806eb20a-dd6e-4f54-b045-2cd33e157484)
 - For Task 1B:
 
-  ![Task_1B](https://github.com/user-attachments/assets/909fb820-0f52-4eaf-b851-024bd693077b)
+  ![Task_1B](https://github.com/user-attachments/assets/31d580c7-8f93-4d03-a063-8d070b90676d)
 - For Task 1C:
 
-  ![Task_1C](https://github.com/user-attachments/assets/47a3243a-cb41-4669-979f-8229605cbee4)
+  ![Task_1C](https://github.com/user-attachments/assets/c1fd00c7-561f-4661-80a0-5a858f0304ed)
 - For Task 2C:
 
   ![Task_2C](https://github.com/user-attachments/assets/a3e38a35-8bd4-4e21-919f-96b7af5298a7)
