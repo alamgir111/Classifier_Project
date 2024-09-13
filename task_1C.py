@@ -1,58 +1,76 @@
-from bokeh.plotting import figure, show
-from bokeh.models import ColumnDataSource
-from bokeh.layouts import column
-from bokeh.io import curdoc
-from bokeh.models.tools import BoxSelectTool, LassoSelectTool
 import pandas as pd
+from bokeh.plotting import figure, ColumnDataSource
+from bokeh.layouts import column
+from bokeh.models import BoxSelectTool, HoverTool, TapTool, CustomJS
+from bokeh.io import curdoc
 
-# Load the data
 df = pd.read_csv('Synthetic_2_classifiers.csv')
 
-# Classify images as accurately predicted by both, one, or none of the classifiers
-both_correct = (df['label'] == df['classifierA_predicted_label']) & (df['label'] == df['classifierB_predicted_label'])
-one_correct_a = (df['label'] == df['classifierA_predicted_label']) & (df['label'] != df['classifierB_predicted_label'])
-one_correct_b = (df['label'] != df['classifierA_predicted_label']) & (df['label'] == df['classifierB_predicted_label'])
+df['fill_colors'] = df.apply(
+    lambda row: 'black' if row['label'] == 'dog' and row['classifierA_predicted_label'] == 'dog' and row['classifierB_predicted_label'] == 'dog'
+    else 'gray' if row['label'] == 'dog' and (row['classifierA_predicted_label'] == 'dog' or row['classifierB_predicted_label'] == 'dog')
+    else 'black' if row['label'] == 'cat' and row['classifierA_predicted_label'] == 'cat' and row['classifierB_predicted_label'] == 'cat'
+    else 'gray' if row['label'] == 'cat' and (row['classifierA_predicted_label'] == 'cat' or row['classifierB_predicted_label'] == 'cat')
+    else 'white', axis=1
+)
 
-# Define colors for points
-df['color'] = ['black' if both else 'gray' if (a or b) else 'white' 
-               for both, a, b in zip(both_correct, one_correct_a, one_correct_b)]
-df['border_color'] = ['red' if label == 'dog' else 'blue' for label in df['label']]
+df['border_colors'] = df.apply(lambda row: 'red' if row['label'] == 'dog' else 'blue', axis=1)
 
-# Prepare data for Bokeh
-source = ColumnDataSource(data=df)
+source = ColumnDataSource(df)
 
-# Create scatterplot
-p = figure(title="Scatterplot with Linked Interactivity", tools="lasso_select, box_select")
-p.circle('x', 'y', fill_color='color', line_color='border_color', source=source, size=8)
+scatter_plot = figure(width=800, height=600, title="Projected Data Space",
+                      tools=[BoxSelectTool(), HoverTool(tooltips=[("Label", "@label"), ("Classifier A", "@classifierA_predicted_label"), ("Classifier B", "@classifierB_predicted_label")]), TapTool()])
 
-# Create bar chart
-bar_chart = figure(x_range=['Dog - A', 'Cat - A', 'Dog - B', 'Cat - B'], title="Classifier Performance")
-bars = bar_chart.vbar(x=['Dog - A', 'Cat - A', 'Dog - B', 'Cat - B'], top=[0, 0, 0, 0], width=0.9)
+scatter_plot.scatter(x="x", y="y", source=source, size=6, fill_color="fill_colors", line_color="border_colors", line_width=2, alpha=0.6)
 
-# Callback to update bar chart based on selection
-def update_bar_chart(attr, old, new):
-    selected_indices = source.selected.indices
-    selected_data = df.iloc[selected_indices]
+# Updated colors for the bar chart
+bar_source = ColumnDataSource(data={'categories': ['Both Correct (A)', 'Both Correct (B)', 'Only Classifier A Correct', 'Only Classifier B Correct', 'None Correct'],
+                                    'counts': [0, 0, 0, 0, 0],
+                                    'colors': ['violet', 'rosybrown', 'blue', 'red', 'aquamarine']})  # Updated colors
 
-    # Classifier A counts
-    dog_a_count = selected_data[(selected_data['label'] == 'dog') & 
-                                (selected_data['classifierA_predicted_label'] == selected_data['label'])].shape[0]
-    cat_a_count = selected_data[(selected_data['label'] == 'cat') & 
-                                (selected_data['classifierA_predicted_label'] == selected_data['label'])].shape[0]
+bar_plot = figure(x_range=['Both Correct (A)', 'Both Correct (B)', 'Only Classifier A Correct', 'Only Classifier B Correct', 'None Correct'], height=400, width=800, title="Classifier Performance", toolbar_location=None, tools="")
+bar_plot.vbar(x='categories', top='counts', source=bar_source, width=0.4, fill_color='colors')
 
-    # Classifier B counts
-    dog_b_count = selected_data[(selected_data['label'] == 'dog') & 
-                                (selected_data['classifierB_predicted_label'] == selected_data['label'])].shape[0]
-    cat_b_count = selected_data[(selected_data['label'] == 'cat') & 
-                                (selected_data['classifierB_predicted_label'] == selected_data['label'])].shape[0]
+bar_plot.x_range.range_padding = 0.1
+bar_plot.xgrid.grid_line_color = None
 
-    # Update the bar chart
-    bars.data_source.data['top'] = [dog_a_count, cat_a_count, dog_b_count, cat_b_count]
+callback = CustomJS(args=dict(source=source, bar_source=bar_source), code="""
+    function countSelected(source, indices) {
+        let both_A = 0, both_B = 0, one_A = 0, one_B = 0, none = 0;
+        for (let i = 0; i < indices.length; i++) {
+            let index = indices[i];
+            let label = source.data['label'][index];
+            let classifierA_pred = source.data['classifierA_predicted_label'][index];
+            let classifierB_pred = source.data['classifierB_predicted_label'][index];
 
-# Add the callback to the selection event
-source.selected.on_change('indices', update_bar_chart)
+            let classifierA_correct = classifierA_pred === label;
+            let classifierB_correct = classifierB_pred === label;
 
-# Layout and show
-layout = column(p, bar_chart)
+            if (classifierA_correct && classifierB_correct) {
+                both_A++;
+                both_B++;
+            } else if (classifierA_correct && !classifierB_correct) {
+                one_A++;
+            } else if (classifierB_correct && !classifierA_correct) {
+                one_B++;
+            } else {
+                none++;
+            }
+        }
+        return [both_A, both_B, one_A, one_B, none];
+    }
+
+    let counts = countSelected(source, source.selected.indices);
+    
+    bar_source.data = {
+        'categories': ['Both Correct (A)', 'Both Correct (B)', 'Only Classifier A Correct', 'Only Classifier B Correct', 'None Correct'],
+        'counts': [counts[0], counts[1], counts[2], counts[3], counts[4]],
+        'colors': bar_source.data['colors']
+    };
+    bar_source.change.emit();
+""")
+
+source.selected.js_on_change('indices', callback)
+
+layout = column(scatter_plot, bar_plot)
 curdoc().add_root(layout)
-show(layout)
